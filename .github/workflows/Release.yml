@@ -1,0 +1,86 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x     
+    - name: Set version number
+      id: version
+      run: |
+        $version = "3.7.5.2-auto"
+        echo "version=$version" >> $env:GITHUB_OUTPUT
+        echo "Using version: $version"
+        
+    - name: Clean Solution
+      run: dotnet clean
+      
+    - name: Create publish directory
+      run: |
+        mkdir "c:\tmp\publish-wj"
+        mkdir "c:\tmp\publish-wj\app"
+        mkdir "c:\tmp\publish-wj\launcher"
+      
+    - name: Build and Publish Wabbajack App
+      run: |
+        dotnet publish Wabbajack.App.Wpf\Wabbajack.App.Wpf.csproj `
+          --framework "net9.0-windows" `
+          --runtime win-x64 `
+          --configuration Release `
+          /p:Platform=x64 `
+          -o c:\tmp\publish-wj\app `
+          /p:IncludeNativeLibrariesForSelfExtract=true `
+          --self-contained `
+          /p:DebugType=embedded
+          
+    - name: Build and Publish Wabbajack Launcher
+      run: |
+        dotnet publish Wabbajack.Launcher\Wabbajack.Launcher.csproj `
+          --framework "net9.0-windows" `
+          --runtime win-x64 `
+          --configuration Release `
+          /p:Platform=x64 `
+          -o c:\tmp\publish-wj\launcher `
+          /p:PublishSingleFile=true `
+          /p:IncludeNativeLibrariesForSelfExtract=true `
+          --self-contained `
+          /p:DebugType=embedded
+          
+    - name: Build and Publish Wabbajack CLI
+      run: |
+        dotnet publish Wabbajack.CLI\Wabbajack.CLI.csproj `
+          --framework "net9.0" `
+          --runtime win-x64 `
+          --configuration Release `
+          /p:Platform=x64 `
+          -o c:\tmp\publish-wj\app\cli `
+          /p:IncludeNativeLibrariesForSelfExtract=true `
+          --self-contained `
+          /p:DebugType=embedded
+          
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        name: Release ${{ steps.version.outputs.version }}
+        tag_name: v${{ steps.version.outputs.version }}
+        files: c:\tmp\publish-wj\app\*
+        draft: false
+        prerelease: true
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Upload Build Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: wabbajack-${{ steps.version.outputs.version }}
+        path: c:\tmp\publish-wj\app\*
